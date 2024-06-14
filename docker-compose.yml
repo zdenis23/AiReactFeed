@@ -1,0 +1,85 @@
+version: "3.9"
+
+services:
+
+  news-platform:
+    build: 
+      context: ./
+    container_name: news-platform
+    restart: always
+    ports:
+      - '0.0.0.0:9380:80'    # for gui/website
+      - 9381:5555  # for Celery Flower Task Que
+      - 9382:9001  # for Docker Supervisor Process Manager
+    depends_on:
+      - news-platform-postgres   # if using PostgreSQL Database
+    volumes:
+      - ./rss_ai_data:/rss_ai/data
+    environment:
+      HOSTS: 'http://localhost,http://127.0.0.1,http://0.0.0.0,http://docker-container-name'
+      CUSTOM_PLATFORM_NAME: 'RSS AI'
+      SIDEBAR_TITLE: 'News'
+      TIME_ZONE: 'Europe/London'
+      ALLOWED_LANGUAGES: 'en,ru'
+      POSTGRESQL_HOST: news-platform-postgres  
+      POSTGRESQL_DB: postgres  
+      POSTGRESQL_USER: postgres  
+      POSTGRESQL_PASSWORD: postgres 
+      #FULL_TEXT_URL: 'http://localhost:80/full-text-rss/'
+      # FEED_CREATOR_URL: 'http://fivefilters:80/feed-creator/'
+      YANDEX_GPT: ''
+      YANDEX_GPT_FOLDER_ID: ''
+    deploy:
+      resources:
+        limits:
+          memory: 2048M  
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"  
+
+
+  # HTTPS LetsEncrypt Container
+  news-platform-letsencrypt:
+    image: linuxserver/letsencrypt
+    container_name: news-platform-letsencrypt
+    restart: always
+    depends_on:
+      - news-platform
+    ports:
+      - 9480:80  # for http
+      - 9443:443 # for https
+    volumes:
+      - rss_ai_letsencrypt:/config
+    environment:
+      - EMAIL=HFHGF@FGFH.COM
+      - URL=yourwebsite.com
+      - SUBDOMAINS=news
+      - VALIDATION=http
+      - TZ=Europe/London
+      - DNSPLUGIN=cloudflare
+      - ONLY_SUBDOMAINS=true
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"  # if you use Watchtower for container updates
+
+
+  # Optional PostgreSQL Database instead of SQLite
+  news-platform-postgres:
+    image: postgres:16
+    container_name: news-platform-postgres
+    restart: always
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres  # has to match above
+      POSTGRES_DB: postgres  # has to match above
+      POSTGRES_PASSWORD: postgres  # has to match above
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"  # if you use Watchtower for container updates
+
+
+volumes:
+  rss_ai_letsencrypt:
